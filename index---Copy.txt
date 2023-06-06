@@ -1,0 +1,98 @@
+<?php
+header('Content-Type: application/json');
+// ?captain=John&items=[{"menu_name":"ITEM 1","qty":1},{"menu_name":"ITEM 2","qty":2}] -> without addons
+// ?captain=John&items=[{"menu_name":"ITEM 1","qty":1},{"menu_name":"ITEM 2","qty":2,"addons":[{"addons_name":"ADDONS 1","qty":2}]}]
+$response = array();
+if (isset($_REQUEST["captain"]) && isset($_REQUEST["items"])) {
+    $itemset = json_decode($_REQUEST["items"]);
+    $maxlength = 41;
+    $flexItem = $maxlength / 3;
+    $outputAsText = true;
+    // $myfile = fopen('\\\\' . getenv('COMPUTERNAME') . '\THERMAL Receipt Printer', "w") or die("Unable to open file!");
+    if(!$outputAsText){
+        $myfile = fopen('\\\\' . getenv('COMPUTERNAME') . '\KOT', "w") or die("Unable to open file!");
+    }else{
+        $myfileName = 'output.txt';
+        $myfile = fopen('output.txt', "w") or die("Unable to open file!");
+    }
+    date_default_timezone_set('Asia/Calcutta');
+    $headLine  = 'Testing Restaurant';
+    $textToPrint = " ";
+    $nextLine  = "\n ";
+    $line = str_repeat("-", $maxlength) . $nextLine;
+    $spaceToAdd =  ($maxlength - strlen($headLine));
+    if ($spaceToAdd % 2 != 0) {
+        $spaceToAdd += 1;
+    }
+    if ($spaceToAdd > 0) {
+        $space = str_repeat(" ", $spaceToAdd / 2);
+        $headLine = $space . $headLine . $nextLine;
+        $textToPrint .= $headLine . $line;
+    } else {
+        $headLine = $headLine . $nextLine;
+        $textToPrint .= $headLine  . $line;
+    }
+    $captainDetails = "Captain : " . $_REQUEST["captain"];
+    $billDate = date("d-m-Y");
+    $billTime = date("h:i:sa");
+    $spaceToAdd = $maxlength - (strlen($captainDetails) + strlen($billDate));
+    if ((strlen($captainDetails) + strlen($billDate)) % 2 != 0) {
+        $spaceToAdd += 1;
+    }
+    if ($spaceToAdd <= 0) {
+        $textToPrint .= $nextLine . $captainDetails . $nextLine;
+        $textToPrint .= str_repeat(" ", $maxlength - strlen($billDate)) . $billDate . $nextLine;
+    } else {
+        $textToPrint .= $nextLine . $captainDetails . str_repeat(" ", $spaceToAdd) . $billDate . $nextLine;
+    }
+    $textToPrint .= str_repeat(" ", ($maxlength) - strlen($billTime)) . $billTime . $nextLine . $line;
+    // ADD A SPACE
+    $qtySpace = round($maxlength / 4);
+    $itemsSpace = $qtySpace * 3;
+    $textToPrint .= str_repeat(" ", round($itemsSpace / 2) - strlen("Item")) . "Item" . str_repeat(" ", $itemsSpace / 2) . ' ' . str_repeat(" ", round($qtySpace / 2)) . "Qty" . $nextLine . $line;
+    // MAPPING THE ITEMS
+    $totelQty = 0;
+    foreach ($itemset as $index => $test) {
+        $lenthFromNumber  = strlen($index + 1) + 2;
+        if ($itemsSpace - strlen($test->menu_name) > 0) {
+            $textToPrint .= $index + 1 . ". " . $test->menu_name . str_repeat(" ", $itemsSpace - strlen($test->menu_name)) . str_repeat(" ", ($qtySpace / 2) - strlen($test->qty)) . $test->qty . $nextLine;
+            $totelQty += $test->qty;
+            if (isset($test->addons))
+                foreach ($test->addons as $test1) {
+                    $textToPrint .= str_repeat(" ", $lenthFromNumber) . "-" . $test1->addons_name . " " . $test1->qty . $nextLine;
+                    $totelQty += $test1->qty;
+                }
+        } else {
+            foreach (str_split($test->menu_name, $itemsSpace) as $charIndex => $itemName) {
+                if ($charIndex == 0) {
+                    $textToPrint .= $index + 1 . ". " . $itemName . str_repeat(" ", ($qtySpace / 2) - 1) . $test->qty . $nextLine;
+                    $totelQty += $test->qty;
+                } else $textToPrint .= $itemName . $nextLine;
+            }
+            if (isset($test->addons))
+                foreach ($test->addons as $test1) {
+                    $textToPrint .=  str_repeat(" ", $lenthFromNumber) . "-" . $test1->addons_name . " (" . $test1->qty . ")" . $nextLine;
+                    $totelQty += $test1->qty;
+                }
+        }
+    }
+    if(!$outputAsText){
+        $textToPrint .= str_repeat("-", $maxlength) . "\n\x1D\x56\x42\x00";
+    }
+    // $textToPrint .= "\x1D\x56\x42\x01";
+    if (fwrite($myfile, $textToPrint)) {
+        $response["status"] = 1;
+        $response['result']= array("message" =>'Printed sucessfully');
+        echo json_encode($response);
+    } else {
+        $response["status"] = 0;
+        $response["error"] = array("message" => "can't connect to printer");
+        echo json_encode($response);
+    };
+    fclose($myfile);
+} else {
+    $response["status"] = 0;
+    $response["error"] = array("message" => "parameter error");
+    echo json_encode($response);
+}
+//java -classpath D:\\xampp\\htdocs\\test\\pdfbox-app-1.7.1.jar org.apache.pdfbox.PrintPDF -silentPrint -printerName "THERMAL Receipt Printer" D:\\xampp\\htdocs\\test\\test.pdf
